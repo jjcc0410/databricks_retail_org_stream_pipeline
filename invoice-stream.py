@@ -1,7 +1,7 @@
 # Databricks notebook source
-class streamInvoices:
+class invoiceStream:
     def __init__(self):
-        self.base_data_dir = "/FileStore/data_spark_streaming-scholarnest"
+        self.base_data_dir = "/FileStore/data_spark_streaming_scholarnest"
 
     def getSchema(self):
         return """InvoiceNumber string, CreatedTime bigint, StoreID string, PosID string, CashierID string,
@@ -48,15 +48,20 @@ class streamInvoices:
             .drop("LineItem")
         )
 
-    def appendInvoices(self, flattenedDF):
-        return (
+    def appendInvoices(self, flattenedDF, trigger="batch"):
+        sQuery = (
             flattenedDF.writeStream.format("delta")
             .option("checkpointLocation", f"{self.base_data_dir}/chekpoint/invoices")
             .outputMode("append")
-            .toTable("invoice_line_items")
+            .option("maxFilesPerTrigger", 1)
         )
 
-    def process(self):
+        if trigger == "batch":
+            return sQuery.trigger(availableNow=True).toTable("invoice_line_items")
+        else:
+            return sQuery.trigger(processingTime=trigger).toTable("invoice_line_items")
+
+    def process(self, trigger="batch"):
         print(f"Starting Invoice Processing Stream...", end="")
         invoicesDF = self.readInvoices()
         explodedDF = self.explodeInvoices(invoicesDF)
